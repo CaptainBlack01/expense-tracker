@@ -43,15 +43,37 @@
             <option value="GHS">GHS (GH₵) - Cedi</option>
             <option value="AED">AED (د.إ)</option>
           </select>
+          <span class="rate-badge" id="exchangeRateBadge" title="Current conversion rate from USD base">1 USD = ₦1,600</span>
         </div>
+
+        <input type="file" id="importFileInput" accept=".json,.csv" style="display: none;">
+        <button class="btn btn-secondary" id="importDataBtn" title="Import JSON or CSV backup">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="17 8 12 3 7 8"></polyline>
+            <line x1="12" y1="3" x2="12" y2="15"></line>
+          </svg>
+          Import
+        </button>
+
         <button class="btn btn-secondary" id="exportDataBtn" title="Export transactions to CSV">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
             <polyline points="7 10 12 15 17 10"></polyline>
             <line x1="12" y1="15" x2="12" y2="3"></line>
           </svg>
-          Export CSV
+          Export
         </button>
+
+        <button class="btn btn-secondary" id="printReportBtn" title="Print or save PDF analytics summary">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 6 2 18 2 18 9"></polyline>
+            <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+            <rect x="6" y="14" width="12" height="8"></rect>
+          </svg>
+          Print
+        </button>
+
         <button class="btn btn-primary" id="openAddModalBtn">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -66,11 +88,20 @@
     <main class="dashboard-main">
       <!-- Timeframe Filter Toolbar -->
       <section class="toolbar-section">
-        <div class="timeframe-selector">
-          <button class="timeframe-btn active" data-period="all">All Time</button>
-          <button class="timeframe-btn" data-period="month">This Month</button>
-          <button class="timeframe-btn" data-period="week">This Week</button>
-          <button class="timeframe-btn" data-period="year">This Year</button>
+        <div class="timeframe-group">
+          <div class="timeframe-selector">
+            <button class="timeframe-btn active" data-period="all">All Time</button>
+            <button class="timeframe-btn" data-period="month">This Month</button>
+            <button class="timeframe-btn" data-period="week">This Week</button>
+            <button class="timeframe-btn" data-period="year">This Year</button>
+            <button class="timeframe-btn" data-period="custom" id="customPeriodBtn">Custom Range</button>
+          </div>
+          <div class="custom-range-inputs" id="customRangeContainer" style="display: none;">
+            <input type="date" id="customStartDate" class="control-date" aria-label="Start date">
+            <span class="range-sep">to</span>
+            <input type="date" id="customEndDate" class="control-date" aria-label="End date">
+            <button class="btn btn-secondary btn-sm" id="applyCustomDateBtn">Apply</button>
+          </div>
         </div>
         <div class="quick-summary-tags">
           <span class="status-indicator live-dot"></span>
@@ -94,6 +125,7 @@
           <div class="kpi-amount" id="netBalanceVal">$0.00</div>
           <div class="kpi-foot">
             <span class="kpi-caption" id="netSavingsRate">Savings Rate: 0%</span>
+            <span class="mom-pill" id="netMoMBadge"></span>
           </div>
         </div>
 
@@ -110,6 +142,7 @@
           <div class="kpi-amount text-success" id="totalIncomeVal">$0.00</div>
           <div class="kpi-foot">
             <span class="kpi-caption" id="incomeCountVal">0 transactions</span>
+            <span class="mom-pill" id="incomeMoMBadge"></span>
           </div>
         </div>
 
@@ -126,6 +159,7 @@
           <div class="kpi-amount text-danger" id="totalExpenseVal">$0.00</div>
           <div class="kpi-foot">
             <span class="kpi-caption" id="expenseCountVal">0 transactions</span>
+            <span class="mom-pill" id="expenseMoMBadge"></span>
           </div>
         </div>
 
@@ -222,6 +256,13 @@
           </div>
         </div>
         <div class="insight-box">
+          <div class="insight-icon icon-recurring">🔁</div>
+          <div class="insight-detail">
+            <span class="insight-label">Recurring Subscriptions</span>
+            <strong class="insight-val" id="recurringCommitmentVal">$0.00 /mo</strong>
+          </div>
+        </div>
+        <div class="insight-box">
           <div class="insight-icon icon-largest">💳</div>
           <div class="insight-detail">
             <span class="insight-label">Largest Expense</span>
@@ -261,6 +302,7 @@
                 <option value="all">All Types</option>
                 <option value="expense">Expenses Only</option>
                 <option value="income">Income Only</option>
+                <option value="recurring">Recurring Subscriptions</option>
               </select>
 
               <!-- Filter Category -->
@@ -392,6 +434,14 @@
             <label class="form-label" for="txNotes">Note / Tag (Optional)</label>
             <input type="text" id="txNotes" class="form-input" placeholder="e.g. Tax deductible, Personal">
           </div>
+        </div>
+
+        <!-- Recurring Checkbox -->
+        <div class="checkbox-row">
+          <label class="custom-checkbox-label" for="txRecurring">
+            <input type="checkbox" id="txRecurring">
+            <span class="checkbox-text">🔁 Recurring monthly bill or subscription</span>
+          </label>
         </div>
 
         <div class="modal-footer">
