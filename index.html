@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Expense Analytics Dashboard</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="dashboard-wrapper">
+    <!-- Top Navigation Bar -->
+    <header class="dashboard-header">
+      <div class="brand">
+        <div class="brand-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="1" x2="12" y2="23"></line>
+            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+          </svg>
+        </div>
+        <div class="brand-info">
+          <h1>TrackPulse</h1>
+          <span class="brand-subtitle">Expense & Analytics Hub</span>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <div class="date-badge" id="currentDateBadge">Today, Nov 5, 2026</div>
+        <button class="btn btn-secondary" id="exportDataBtn" title="Export transactions to CSV">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+          Export CSV
+        </button>
+        <button class="btn btn-primary" id="openAddModalBtn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          Add Transaction
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Content Grid -->
+    <main class="dashboard-main">
+      <!-- Timeframe Filter Toolbar -->
+      <section class="toolbar-section">
+        <div class="timeframe-selector">
+          <button class="timeframe-btn active" data-period="all">All Time</button>
+          <button class="timeframe-btn" data-period="month">This Month</button>
+          <button class="timeframe-btn" data-period="week">This Week</button>
+          <button class="timeframe-btn" data-period="year">This Year</button>
+        </div>
+        <div class="quick-summary-tags">
+          <span class="status-indicator live-dot"></span>
+          <span class="status-text" id="activeFilterLabel">Showing all historical records</span>
+          <button class="btn-text-danger" id="resetDemoBtn" title="Reset sample records">Reset Sample Data</button>
+        </div>
+      </section>
+
+      <!-- KPI Summary Cards -->
+      <section class="kpi-grid">
+        <div class="kpi-card balance-card">
+          <div class="kpi-top">
+            <span class="kpi-title">Net Balance</span>
+            <div class="kpi-icon icon-balance">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="2" y="4" width="20" height="16" rx="2"></rect>
+                <line x1="2" y1="10" x2="22" y2="10"></line>
+              </svg>
+            </div>
+          </div>
+          <div class="kpi-amount" id="netBalanceVal">$0.00</div>
+          <div class="kpi-foot">
+            <span class="kpi-caption" id="netSavingsRate">Savings Rate: 0%</span>
+          </div>
+        </div>
+
+        <div class="kpi-card income-card">
+          <div class="kpi-top">
+            <span class="kpi-title">Total Income</span>
+            <div class="kpi-icon icon-income">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="19" x2="12" y2="5"></line>
+                <polyline points="5 12 12 5 19 12"></polyline>
+              </svg>
+            </div>
+          </div>
+          <div class="kpi-amount text-success" id="totalIncomeVal">$0.00</div>
+          <div class="kpi-foot">
+            <span class="kpi-caption" id="incomeCountVal">0 transactions</span>
+          </div>
+        </div>
+
+        <div class="kpi-card expense-card">
+          <div class="kpi-top">
+            <span class="kpi-title">Total Expenses</span>
+            <div class="kpi-icon icon-expense">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <polyline points="19 12 12 19 5 12"></polyline>
+              </svg>
+            </div>
+          </div>
+          <div class="kpi-amount text-danger" id="totalExpenseVal">$0.00</div>
+          <div class="kpi-foot">
+            <span class="kpi-caption" id="expenseCountVal">0 transactions</span>
+          </div>
+        </div>
+
+        <div class="kpi-card budget-card">
+          <div class="kpi-top">
+            <div class="kpi-title-row">
+              <span class="kpi-title">Monthly Budget Target</span>
+              <button class="budget-edit-btn" id="editBudgetBtn" title="Set monthly budget limit">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                </svg>
+              </button>
+            </div>
+            <div class="kpi-icon icon-budget">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <circle cx="12" cy="12" r="6"></circle>
+                <circle cx="12" cy="12" r="2"></circle>
+              </svg>
+            </div>
+          </div>
+          <div class="budget-values">
+            <span class="budget-spent" id="budgetSpentVal">$0</span>
+            <span class="budget-cap" id="budgetCapVal">/ $3,500</span>
+          </div>
+          <div class="budget-progress-track">
+            <div class="budget-progress-bar" id="budgetProgressBar" style="width: 0%"></div>
+          </div>
+          <div class="kpi-foot">
+            <span class="kpi-caption" id="budgetStatusText">0% of target spent</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Analytics Charts Section -->
+      <section class="charts-grid">
+        <!-- Cash Flow Bar/Line Chart -->
+        <div class="chart-card flow-chart-card">
+          <div class="card-header">
+            <div>
+              <h2 class="card-title">Cash Flow Dynamics</h2>
+              <p class="card-subtitle">Income vs Expenses over time</p>
+            </div>
+            <div class="chart-legend-box">
+              <span class="legend-item"><span class="legend-color legend-income"></span> Income</span>
+              <span class="legend-item"><span class="legend-color legend-expense"></span> Expense</span>
+            </div>
+          </div>
+          <div class="chart-canvas-container" id="barChartContainer">
+            <canvas id="cashFlowCanvas"></canvas>
+            <div class="chart-tooltip" id="chartTooltip"></div>
+          </div>
+        </div>
+
+        <!-- Expense Category Breakdown Donut -->
+        <div class="chart-card category-chart-card">
+          <div class="card-header">
+            <div>
+              <h2 class="card-title">Expense Breakdown</h2>
+              <p class="card-subtitle">Spending by category</p>
+            </div>
+            <span class="badge" id="categoryCountBadge">0 Categories</span>
+          </div>
+          <div class="donut-chart-layout">
+            <div class="donut-canvas-container" id="donutContainer">
+              <canvas id="categoryDonutCanvas"></canvas>
+              <div class="donut-center-info">
+                <span class="donut-center-label">Total Out</span>
+                <span class="donut-center-val" id="donutCenterTotal">$0</span>
+              </div>
+            </div>
+            <div class="category-legend-list" id="categoryLegendList">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Analytical Insights Row -->
+      <section class="insights-grid">
+        <div class="insight-box">
+          <div class="insight-icon icon-fire">🔥</div>
+          <div class="insight-detail">
+            <span class="insight-label">Top Spending Area</span>
+            <strong class="insight-val" id="topSpendingCategory">None</strong>
+          </div>
+        </div>
+        <div class="insight-box">
+          <div class="insight-icon icon-avg">📊</div>
+          <div class="insight-detail">
+            <span class="insight-label">Daily Avg Spending</span>
+            <strong class="insight-val" id="dailyAvgSpending">$0.00</strong>
+          </div>
+        </div>
+        <div class="insight-box">
+          <div class="insight-icon icon-largest">💳</div>
+          <div class="insight-detail">
+            <span class="insight-label">Largest Expense</span>
+            <strong class="insight-val" id="largestExpenseVal">$0.00</strong>
+          </div>
+        </div>
+        <div class="insight-box">
+          <div class="insight-icon icon-count">🏷️</div>
+          <div class="insight-detail">
+            <span class="insight-label">Active Records</span>
+            <strong class="insight-val" id="activeRecordsCount">0</strong>
+          </div>
+        </div>
+      </section>
+
+      <!-- Transactions Management Section -->
+      <section class="table-section">
+        <div class="table-card">
+          <div class="table-controls-header">
+            <div class="controls-left">
+              <h2 class="card-title">Transaction Records</h2>
+              <span class="table-count-badge" id="filteredCountBadge">0 items</span>
+            </div>
+
+            <div class="controls-right">
+              <!-- Search Input -->
+              <div class="search-input-wrapper">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="11" cy="11" r="8"></circle>
+                  <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
+                <input type="text" id="searchInput" placeholder="Search title, category, notes..." autocomplete="off">
+              </div>
+
+              <!-- Filter Type -->
+              <select class="control-select" id="typeFilter">
+                <option value="all">All Types</option>
+                <option value="expense">Expenses Only</option>
+                <option value="income">Income Only</option>
+              </select>
+
+              <!-- Filter Category -->
+              <select class="control-select" id="categoryFilter">
+                <option value="all">All Categories</option>
+                <!-- Populated dynamically -->
+              </select>
+
+              <!-- Sort Order -->
+              <select class="control-select" id="sortBy">
+                <option value="date-desc">Date (Newest First)</option>
+                <option value="date-asc">Date (Oldest First)</option>
+                <option value="amount-desc">Amount (Highest)</option>
+                <option value="amount-asc">Amount (Lowest)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Table Container -->
+          <div class="table-responsive">
+            <table class="data-table" id="transactionsTable">
+              <thead>
+                <tr>
+                  <th>Transaction</th>
+                  <th>Category</th>
+                  <th>Date</th>
+                  <th>Payment Method</th>
+                  <th class="text-right">Amount</th>
+                  <th class="text-center">Action</th>
+                </tr>
+              </thead>
+              <tbody id="transactionsTableBody">
+                <!-- Injected via JavaScript -->
+              </tbody>
+            </table>
+            <!-- Empty State -->
+            <div class="empty-state" id="emptyState" style="display: none;">
+              <div class="empty-icon">📁</div>
+              <h3>No transactions found</h3>
+              <p>Try adjusting your search filters or record a new transaction.</p>
+              <button class="btn btn-secondary btn-sm" id="emptyAddBtn">Add First Transaction</button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Modal: Add / Edit Transaction -->
+  <div class="modal-backdrop" id="transactionModal" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 class="modal-title" id="modalTitle">Add Transaction</h3>
+        <button class="modal-close-btn" id="closeModalBtn" aria-label="Close modal">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+
+      <form id="transactionForm" novalidate>
+        <input type="hidden" id="editingId" value="">
+
+        <!-- Transaction Type Switcher -->
+        <div class="form-group">
+          <label class="form-label">Type</label>
+          <div class="type-toggle-group">
+            <label class="type-option">
+              <input type="radio" name="txType" value="expense" checked>
+              <span class="type-pill expense-pill">Expense</span>
+            </label>
+            <label class="type-option">
+              <input type="radio" name="txType" value="income">
+              <span class="type-pill income-pill">Income</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <!-- Title -->
+          <div class="form-group flex-2">
+            <label class="form-label" for="txTitle">Title / Description <span class="required">*</span></label>
+            <input type="text" id="txTitle" class="form-input" placeholder="e.g. Grocery Store, Client Invoice" required>
+            <span class="form-error" id="titleError"></span>
+          </div>
+
+          <!-- Amount -->
+          <div class="form-group flex-1">
+            <label class="form-label" for="txAmount">Amount ($) <span class="required">*</span></label>
+            <input type="number" id="txAmount" class="form-input" placeholder="0.00" step="0.01" min="0.01" required>
+            <span class="form-error" id="amountError"></span>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <!-- Category -->
+          <div class="form-group flex-1">
+            <label class="form-label" for="txCategory">Category <span class="required">*</span></label>
+            <select id="txCategory" class="form-input" required>
+              <!-- Filled depending on expense/income -->
+            </select>
+          </div>
+
+          <!-- Date -->
+          <div class="form-group flex-1">
+            <label class="form-label" for="txDate">Date <span class="required">*</span></label>
+            <input type="date" id="txDate" class="form-input" required>
+            <span class="form-error" id="dateError"></span>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <!-- Payment Method -->
+          <div class="form-group flex-1">
+            <label class="form-label" for="txPaymentMethod">Payment Method</label>
+            <select id="txPaymentMethod" class="form-input">
+              <option value="Credit Card">Credit Card</option>
+              <option value="Debit Card">Debit Card</option>
+              <option value="Bank Transfer">Bank Transfer</option>
+              <option value="Cash">Cash</option>
+              <option value="PayPal">PayPal / Digital</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+
+          <!-- Notes / Tag -->
+          <div class="form-group flex-1">
+            <label class="form-label" for="txNotes">Note / Tag (Optional)</label>
+            <input type="text" id="txNotes" class="form-input" placeholder="e.g. Tax deductible, Personal">
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="cancelModalBtn">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="saveTransactionBtn">Save Transaction</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Budget Edit Modal -->
+  <div class="modal-backdrop" id="budgetModal" aria-hidden="true">
+    <div class="modal-dialog modal-sm">
+      <div class="modal-header">
+        <h3 class="modal-title">Monthly Budget Target</h3>
+        <button class="modal-close-btn" id="closeBudgetModalBtn" aria-label="Close modal">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <form id="budgetForm">
+        <div class="form-group">
+          <label class="form-label" for="budgetInput">Monthly Spending Limit ($)</label>
+          <input type="number" id="budgetInput" class="form-input" min="100" step="50" required>
+          <span class="form-hint">Set your benchmark limit to track spending velocity.</span>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="cancelBudgetBtn">Cancel</button>
+          <button type="submit" class="btn btn-primary">Update Limit</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div class="toast" id="toast"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
+
