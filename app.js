@@ -9,6 +9,23 @@
   // Storage Keys
   const STORAGE_KEY_TRANSACTIONS = 'trackpulse_transactions_v1';
   const STORAGE_KEY_BUDGET = 'trackpulse_budget_limit_v1';
+  const STORAGE_KEY_CURRENCY = 'trackpulse_currency_v1';
+
+  // Currency Definitions & Formats
+  const CURRENCIES = {
+    USD: { code: 'USD', symbol: '$', locale: 'en-US', name: 'US Dollar ($)' },
+    NGN: { code: 'NGN', symbol: '₦', locale: 'en-NG', name: 'Nigerian Naira (₦)' },
+    GBP: { code: 'GBP', symbol: '£', locale: 'en-GB', name: 'British Pound (£)' },
+    EUR: { code: 'EUR', symbol: '€', locale: 'de-DE', name: 'Euro (€)' },
+    CAD: { code: 'CAD', symbol: 'C$', locale: 'en-CA', name: 'Canadian Dollar (C$)' },
+    AUD: { code: 'AUD', symbol: 'A$', locale: 'en-AU', name: 'Australian Dollar (A$)' },
+    JPY: { code: 'JPY', symbol: '¥', locale: 'ja-JP', name: 'Japanese Yen (¥)' },
+    INR: { code: 'INR', symbol: '₹', locale: 'en-IN', name: 'Indian Rupee (₹)' },
+    ZAR: { code: 'ZAR', symbol: 'R', locale: 'en-ZA', name: 'South African Rand (R)' },
+    KES: { code: 'KES', symbol: 'KSh', locale: 'en-KE', name: 'Kenyan Shilling (KSh)' },
+    GHS: { code: 'GHS', symbol: 'GH₵', locale: 'en-GH', name: 'Ghanaian Cedi (GH₵)' },
+    AED: { code: 'AED', symbol: 'د.إ', locale: 'ar-AE', name: 'UAE Dirham (د.إ)' }
+  };
 
   // Category Configuration & Colors (Direct values - No CSS Variables)
   const EXPENSE_CATEGORIES = [
@@ -36,6 +53,7 @@
   // App State
   let transactions = [];
   let monthlyBudget = 3500;
+  let currentCurrency = 'USD';
   let activePeriod = 'all'; // 'all', 'month', 'week', 'year'
   let searchQuery = '';
   let filterType = 'all';
@@ -49,6 +67,7 @@
   // DOM Elements Cache
   const elements = {
     currentDateBadge: document.getElementById('currentDateBadge'),
+    currencySelect: document.getElementById('currencySelect'),
     exportDataBtn: document.getElementById('exportDataBtn'),
     openAddModalBtn: document.getElementById('openAddModalBtn'),
     resetDemoBtn: document.getElementById('resetDemoBtn'),
@@ -102,6 +121,7 @@
     editingId: document.getElementById('editingId'),
     txTitle: document.getElementById('txTitle'),
     txAmount: document.getElementById('txAmount'),
+    txAmountCurrencyLabel: document.getElementById('txAmountCurrencyLabel'),
     txCategory: document.getElementById('txCategory'),
     txDate: document.getElementById('txDate'),
     txPaymentMethod: document.getElementById('txPaymentMethod'),
@@ -114,6 +134,7 @@
     budgetModal: document.getElementById('budgetModal'),
     budgetForm: document.getElementById('budgetForm'),
     budgetInput: document.getElementById('budgetInput'),
+    budgetCurrencyLabel: document.getElementById('budgetCurrencyLabel'),
     closeBudgetModalBtn: document.getElementById('closeBudgetModalBtn'),
     cancelBudgetBtn: document.getElementById('cancelBudgetBtn'),
 
@@ -276,6 +297,15 @@
       if (storedBudget) {
         monthlyBudget = parseFloat(storedBudget) || 3500;
       }
+
+      const storedCurrency = localStorage.getItem(STORAGE_KEY_CURRENCY);
+      if (storedCurrency && CURRENCIES[storedCurrency]) {
+        currentCurrency = storedCurrency;
+      }
+      if (elements.currencySelect) {
+        elements.currencySelect.value = currentCurrency;
+      }
+      updateCurrencyLabels();
     } catch (e) {
       console.warn('WebStorage access error:', e);
       transactions = generateDefaultDemoTransactions();
@@ -299,6 +329,34 @@
     }
   }
 
+  function saveCurrency() {
+    try {
+      localStorage.setItem(STORAGE_KEY_CURRENCY, currentCurrency);
+    } catch (e) {
+      console.error('Failed to write currency', e);
+    }
+  }
+
+  function updateCurrencyLabels() {
+    const curr = CURRENCIES[currentCurrency] || CURRENCIES.USD;
+    if (elements.txAmountCurrencyLabel) {
+      elements.txAmountCurrencyLabel.textContent = curr.symbol;
+    }
+    if (elements.budgetCurrencyLabel) {
+      elements.budgetCurrencyLabel.textContent = curr.symbol;
+    }
+  }
+
+  function setCurrency(newCode) {
+    if (CURRENCIES[newCode] && newCode !== currentCurrency) {
+      currentCurrency = newCode;
+      saveCurrency();
+      updateCurrencyLabels();
+      refreshDashboard();
+      showToast(`Switched currency to ${CURRENCIES[newCode].name}`);
+    }
+  }
+
   // ==========================================================================
   // Toast Notification
   // ==========================================================================
@@ -317,13 +375,35 @@
   // ==========================================================================
   // Utilities
   // ==========================================================================
-  function formatCurrency(val) {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    }).format(val);
+  function formatCurrency(val, compact = false) {
+    const curr = CURRENCIES[currentCurrency] || CURRENCIES.USD;
+    const num = Number(val) || 0;
+    const sign = num < 0 ? '-' : '';
+    const absNum = Math.abs(num);
+
+    if (compact && absNum >= 1000) {
+      if (absNum >= 1000000) {
+        return `${sign}${curr.symbol}${(absNum / 1000000).toFixed(1)}M`;
+      }
+      return `${sign}${curr.symbol}${(absNum / 1000).toFixed(1)}k`;
+    }
+
+    const minDigits = curr.code === 'JPY' ? 0 : 2;
+    const maxDigits = curr.code === 'JPY' ? 0 : 2;
+
+    try {
+      return new Intl.NumberFormat(curr.locale, {
+        style: 'currency',
+        currency: curr.code,
+        minimumFractionDigits: minDigits,
+        maximumFractionDigits: maxDigits
+      }).format(num);
+    } catch (e) {
+      return `${sign}${curr.symbol}${absNum.toLocaleString('en-US', {
+        minimumFractionDigits: minDigits,
+        maximumFractionDigits: maxDigits
+      })}`;
+    }
   }
 
   function getCategoryMeta(catName, type) {
@@ -588,7 +668,7 @@
     }
 
     // Chart Layout Dimensions
-    const paddingLeft = 55;
+    const paddingLeft = 65;
     const paddingRight = 20;
     const paddingTop = 25;
     const paddingBottom = 40;
@@ -627,7 +707,7 @@
 
       // Y-axis text
       ctx.fillStyle = '#64748b';
-      const formattedY = yVal >= 1000 ? `$${(yVal / 1000).toFixed(1)}k` : `$${Math.round(yVal)}`;
+      const formattedY = formatCurrency(yVal, true);
       ctx.fillText(formattedY, paddingLeft - 10, yPos);
     }
 
@@ -1156,6 +1236,13 @@
     // Current Date Display
     const options = { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' };
     elements.currentDateBadge.textContent = new Date().toLocaleDateString('en-US', options);
+
+    // Currency Switcher
+    if (elements.currencySelect) {
+      elements.currencySelect.addEventListener('change', (e) => {
+        setCurrency(e.target.value);
+      });
+    }
 
     // Modal Triggers
     elements.openAddModalBtn.addEventListener('click', openAddModal);

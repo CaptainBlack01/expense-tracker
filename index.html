@@ -28,6 +28,22 @@
 
       <div class="header-actions">
         <div class="date-badge" id="currentDateBadge">Today, Nov 5, 2026</div>
+        <div class="currency-selector-wrapper">
+          <select class="currency-select" id="currencySelect" title="Select Display Currency" aria-label="Select Currency">
+            <option value="USD">USD ($)</option>
+            <option value="NGN">NGN (₦) - Naira</option>
+            <option value="GBP">GBP (£) - Pound</option>
+            <option value="EUR">EUR (€) - Euro</option>
+            <option value="CAD">CAD (C$)</option>
+            <option value="AUD">AUD (A$)</option>
+            <option value="JPY">JPY (¥) - Yen</option>
+            <option value="INR">INR (₹) - Rupee</option>
+            <option value="ZAR">ZAR (R) - Rand</option>
+            <option value="KES">KES (KSh)</option>
+            <option value="GHS">GHS (GH₵) - Cedi</option>
+            <option value="AED">AED (د.إ)</option>
+          </select>
+        </div>
         <button class="btn btn-secondary" id="exportDataBtn" title="Export transactions to CSV">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
@@ -334,7 +350,7 @@
 
           <!-- Amount -->
           <div class="form-group flex-1">
-            <label class="form-label" for="txAmount">Amount ($) <span class="required">*</span></label>
+            <label class="form-label" for="txAmount">Amount (<span id="txAmountCurrencyLabel">$</span>) <span class="required">*</span></label>
             <input type="number" id="txAmount" class="form-input" placeholder="0.00" step="0.01" min="0.01" required>
             <span class="form-error" id="amountError"></span>
           </div>
@@ -400,7 +416,7 @@
       </div>
       <form id="budgetForm">
         <div class="form-group">
-          <label class="form-label" for="budgetInput">Monthly Spending Limit ($)</label>
+          <label class="form-label" for="budgetInput">Monthly Spending Limit (<span id="budgetCurrencyLabel">$</span>)</label>
           <input type="number" id="budgetInput" class="form-input" min="100" step="50" required>
           <span class="form-hint">Set your benchmark limit to track spending velocity.</span>
         </div>

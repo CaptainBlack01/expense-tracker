@@ -3,6 +3,7 @@
 TrackPulse is a single-page expense tracker and financial analytics dashboard built with vanilla HTML, CSS, and JavaScript.
 
 ## Features
+- **Multi-Currency Support**: Switch on-the-fly between Naira (₦), Pounds (£), US Dollars ($), Euros (€), Yen (¥), Rupee (₹), and more with persistent WebStorage preferences.
 - **Real-Time KPIs**: Track Net Balance, Total Income, Total Expenses, and Savings Rate.
 - **Monthly Budget Monitor**: Visual progress tracking against your monthly spending target with threshold indicators.
 - **Interactive Canvas Charts**:
@@ -20,3 +21,4 @@ TrackPulse is a single-page expense tracker and financial analytics dashboard bu
 
 ## Getting Started
 Clone or download this repository and open `index.html` in any modern web browser.
+
