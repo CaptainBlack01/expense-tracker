@@ -1,6 +1,6 @@
 /**
  * TrackPulse - Vanilla JS Expense Tracker & Analytics Engine
- * Multi-Currency Exchange Valuation & Analytics System
+ * Multi-Currency Valuation & Advanced Category Budgeting System
  * Persistent storage via WebStorage (localStorage) with zero external libraries.
  */
 
@@ -11,9 +11,11 @@
   const STORAGE_KEY_TRANSACTIONS = 'trackpulse_transactions_v2';
   const STORAGE_KEY_BUDGET = 'trackpulse_budget_limit_v2';
   const STORAGE_KEY_CURRENCY = 'trackpulse_currency_v2';
+  const STORAGE_KEY_CAT_BUDGETS = 'trackpulse_category_budgets_v2';
+  const STORAGE_KEY_CUSTOM_RATES = 'trackpulse_custom_rates_v2';
 
-  // Currency Definitions & Conversion Rates (Base: USD = 1.0)
-  const CURRENCIES = {
+  // Default Currency Definitions & Conversion Rates (Base: USD = 1.0)
+  const DEFAULT_CURRENCIES = {
     USD: { code: 'USD', symbol: '$', rate: 1.0, locale: 'en-US', name: 'US Dollar ($)' },
     NGN: { code: 'NGN', symbol: '₦', rate: 1600.0, locale: 'en-NG', name: 'Nigerian Naira (₦)' },
     GBP: { code: 'GBP', symbol: '£', rate: 0.79, locale: 'en-GB', name: 'British Pound (£)' },
@@ -27,6 +29,8 @@
     GHS: { code: 'GHS', symbol: 'GH₵', rate: 16.2, locale: 'en-GH', name: 'Ghanaian Cedi (GH₵)' },
     AED: { code: 'AED', symbol: 'د.إ', rate: 3.67, locale: 'ar-AE', name: 'UAE Dirham (د.إ)' }
   };
+
+  let CURRENCIES = JSON.parse(JSON.stringify(DEFAULT_CURRENCIES));
 
   // Category Configuration & Direct Colors (No CSS Variables)
   const EXPENSE_CATEGORIES = [
@@ -51,10 +55,26 @@
     { name: 'Other Income', color: '#64748b', icon: '💰' }
   ];
 
+  // Default Category Budgets in USD
+  const DEFAULT_CAT_BUDGETS_USD = {
+    'Housing & Rent': 1500,
+    'Food & Dining': 350,
+    'Utilities & Bills': 130,
+    'Shopping & Goods': 200,
+    'Transportation': 100,
+    'Entertainment': 60,
+    'Health & Medical': 120,
+    'Education & Books': 100,
+    'Travel & Vacations': 150,
+    'Other Expense': 100
+  };
+
   // App State (All persistent monetary values stored in Base USD)
   let transactions = [];
   let monthlyBudgetUsd = 3500;
+  let categoryBudgetsUsd = { ...DEFAULT_CAT_BUDGETS_USD };
   let currentCurrency = 'USD';
+  let chartMode = 'bar'; // 'bar' | 'trend'
   let activePeriod = 'all'; // 'all', 'month', 'week', 'year', 'custom'
   let customStartDate = '';
   let customEndDate = '';
@@ -65,7 +85,7 @@
 
   // Canvas State
   let barHoverIndex = -1;
-  let currentChartBars = [];
+  let currentChartElements = [];
 
   // DOM Elements Cache
   const elements = {
@@ -84,6 +104,7 @@
     customEndDate: document.getElementById('customEndDate'),
     applyCustomDateBtn: document.getElementById('applyCustomDateBtn'),
     activeFilterLabel: document.getElementById('activeFilterLabel'),
+    budgetAlertPill: document.getElementById('budgetAlertPill'),
 
     // KPIs
     netBalanceVal: document.getElementById('netBalanceVal'),
@@ -110,10 +131,14 @@
     // Charts
     cashFlowCanvas: document.getElementById('cashFlowCanvas'),
     chartTooltip: document.getElementById('chartTooltip'),
+    chartModeBarBtn: document.getElementById('chartModeBarBtn'),
+    chartModeLineBtn: document.getElementById('chartModeLineBtn'),
+    chartLegendBox: document.getElementById('chartLegendBox'),
     categoryDonutCanvas: document.getElementById('categoryDonutCanvas'),
     donutCenterTotal: document.getElementById('donutCenterTotal'),
     categoryLegendList: document.getElementById('categoryLegendList'),
     categoryCountBadge: document.getElementById('categoryCountBadge'),
+    openCatBudgetsBtn: document.getElementById('openCatBudgetsBtn'),
 
     // Table Controls
     filteredCountBadge: document.getElementById('filteredCountBadge'),
@@ -126,7 +151,7 @@
     emptyState: document.getElementById('emptyState'),
     emptyAddBtn: document.getElementById('emptyAddBtn'),
 
-    // Modal
+    // Modals
     transactionModal: document.getElementById('transactionModal'),
     modalTitle: document.getElementById('modalTitle'),
     closeModalBtn: document.getElementById('closeModalBtn'),
@@ -145,13 +170,26 @@
     amountError: document.getElementById('amountError'),
     dateError: document.getElementById('dateError'),
 
-    // Budget Modal
     budgetModal: document.getElementById('budgetModal'),
     budgetForm: document.getElementById('budgetForm'),
     budgetInput: document.getElementById('budgetInput'),
     budgetCurrencyLabel: document.getElementById('budgetCurrencyLabel'),
     closeBudgetModalBtn: document.getElementById('closeBudgetModalBtn'),
     cancelBudgetBtn: document.getElementById('cancelBudgetBtn'),
+
+    catBudgetModal: document.getElementById('catBudgetModal'),
+    catBudgetForm: document.getElementById('catBudgetForm'),
+    catBudgetInputsContainer: document.getElementById('catBudgetInputsContainer'),
+    catBudgetCurrencyNotice: document.getElementById('catBudgetCurrencyNotice'),
+    closeCatBudgetModalBtn: document.getElementById('closeCatBudgetModalBtn'),
+    cancelCatBudgetBtn: document.getElementById('cancelCatBudgetBtn'),
+
+    exchangeRateModal: document.getElementById('exchangeRateModal'),
+    exchangeRateForm: document.getElementById('exchangeRateForm'),
+    customRateInput: document.getElementById('customRateInput'),
+    rateModalCurrencyName: document.getElementById('rateModalCurrencyName'),
+    closeExchangeRateModalBtn: document.getElementById('closeExchangeRateModalBtn'),
+    resetRateBtn: document.getElementById('resetRateBtn'),
 
     // Toast
     toast: document.getElementById('toast')
@@ -242,13 +280,12 @@
       return `${year}-${m}-${d}`;
     };
 
-    // Calculate previous month for realistic Month-over-Month comparison
     const prevMonthDate = new Date(currentYear, currentMonth - 1, 1);
     const prevYear = prevMonthDate.getFullYear();
     const prevMonth = prevMonthDate.getMonth();
 
     return [
-      // Current Month
+      // Current Month Records
       {
         id: 'tx_demo_1',
         title: 'Monthly Tech Salary',
@@ -446,10 +483,10 @@
   // ==========================================================================
   function loadFromStorage() {
     try {
+      // 1. Transactions
       const storedTx = localStorage.getItem(STORAGE_KEY_TRANSACTIONS);
       if (storedTx) {
         transactions = JSON.parse(storedTx);
-        // Ensure baseAmount property exists on all records
         transactions.forEach(t => {
           if (t.baseAmount === undefined) {
             t.baseAmount = Number(t.amount) || 0;
@@ -460,15 +497,35 @@
         saveTransactions();
       }
 
+      // 2. Monthly Budget
       const storedBudget = localStorage.getItem(STORAGE_KEY_BUDGET);
       if (storedBudget) {
         monthlyBudgetUsd = parseFloat(storedBudget) || 3500;
       }
 
+      // 3. Category Budgets
+      const storedCatBudgets = localStorage.getItem(STORAGE_KEY_CAT_BUDGETS);
+      if (storedCatBudgets) {
+        categoryBudgetsUsd = { ...DEFAULT_CAT_BUDGETS_USD, ...JSON.parse(storedCatBudgets) };
+      }
+
+      // 4. Custom Rates
+      const storedRates = localStorage.getItem(STORAGE_KEY_CUSTOM_RATES);
+      if (storedRates) {
+        const parsedRates = JSON.parse(storedRates);
+        for (const [code, rateVal] of Object.entries(parsedRates)) {
+          if (CURRENCIES[code]) {
+            CURRENCIES[code].rate = Number(rateVal);
+          }
+        }
+      }
+
+      // 5. Selected Currency
       const storedCurrency = localStorage.getItem(STORAGE_KEY_CURRENCY);
       if (storedCurrency && CURRENCIES[storedCurrency]) {
         currentCurrency = storedCurrency;
       }
+
       updateCurrencyUI();
     } catch (e) {
       console.warn('WebStorage access error:', e);
@@ -490,6 +547,26 @@
       localStorage.setItem(STORAGE_KEY_BUDGET, monthlyBudgetUsd.toString());
     } catch (e) {
       console.error('Failed to write budget', e);
+    }
+  }
+
+  function saveCategoryBudgets() {
+    try {
+      localStorage.setItem(STORAGE_KEY_CAT_BUDGETS, JSON.stringify(categoryBudgetsUsd));
+    } catch (e) {
+      console.error('Failed to write category budgets', e);
+    }
+  }
+
+  function saveCustomRates() {
+    try {
+      const customRates = {};
+      for (const [code, item] of Object.entries(CURRENCIES)) {
+        customRates[code] = item.rate;
+      }
+      localStorage.setItem(STORAGE_KEY_CUSTOM_RATES, JSON.stringify(customRates));
+    } catch (e) {
+      console.error('Failed to write custom rates', e);
     }
   }
 
@@ -573,17 +650,14 @@
     const periodData = getPeriodFilteredTransactions();
 
     return periodData.filter(tx => {
-      // Type & Recurring filter
       if (filterType === 'expense' && tx.type !== 'expense') return false;
       if (filterType === 'income' && tx.type !== 'income') return false;
       if (filterType === 'recurring' && !tx.recurring) return false;
 
-      // Category filter
       if (filterCategory !== 'all' && tx.category !== filterCategory) {
         return false;
       }
 
-      // Search query
       if (searchQuery.trim() !== '') {
         const q = searchQuery.toLowerCase();
         const inTitle = (tx.title || '').toLowerCase().includes(q);
@@ -656,7 +730,6 @@
       const sign = diff > 0 ? '+' : '';
       elem.textContent = `${sign}${diff.toFixed(1)}% MoM`;
 
-      // For expenses, a reduction is positive (green)
       const isGood = isExpense ? diff < 0 : diff >= 0;
       elem.className = `mom-pill ${isGood ? 'positive' : 'negative'}`;
     }
@@ -701,7 +774,6 @@
       savingsRate = Math.round(((totalIncomeUsd - totalExpenseUsd) / totalIncomeUsd) * 100);
     }
 
-    // Display formatted amounts converted to current currency
     const displayNet = toDisplayAmount(netBalanceUsd);
     elements.netBalanceVal.textContent = formatCurrency(displayNet);
     elements.netBalanceVal.style.color = displayNet >= 0 ? '#ffffff' : '#ef4444';
@@ -713,7 +785,7 @@
     elements.totalExpenseVal.textContent = formatCurrency(toDisplayAmount(totalExpenseUsd));
     elements.expenseCountVal.textContent = `${expenseCount} record${expenseCount === 1 ? '' : 's'}`;
 
-    // Monthly Budget Status (calculated from current calendar month in Base USD)
+    // Monthly Budget Status
     const now = new Date();
     const currentMonthExpensesUsd = transactions
       .filter(tx => {
@@ -770,12 +842,11 @@
 
     elements.largestExpenseVal.textContent = formatCurrency(toDisplayAmount(largestExpenseUsd));
 
-    // Update MoM Badges
     updateMoMBadges();
   }
 
   // ==========================================================================
-  // High-DPI Custom Canvas Visualizations (No CSS Variables)
+  // High-DPI Canvas Charts (Bars vs. Cumulative Trend Line)
   // ==========================================================================
   function setupRetinaCanvas(canvas) {
     const dpr = window.devicePixelRatio || 1;
@@ -792,18 +863,17 @@
     return { ctx, width, height, dpr };
   }
 
-  // 1. Cash Flow Dynamics Bar Chart
   function renderCashFlowChart(periodData) {
     const canvas = elements.cashFlowCanvas;
     if (!canvas || !canvas.parentElement) return;
 
     const { ctx, width, height } = setupRetinaCanvas(canvas);
-    currentChartBars = [];
+    currentChartElements = [];
 
     const buckets = {};
     if (activePeriod === 'week') {
       const dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-      dayLabels.forEach(d => { buckets[d] = { label: d, income: 0, expense: 0 }; });
+      dayLabels.forEach(d => { buckets[d] = { label: d, income: 0, expense: 0, net: 0 }; });
 
       periodData.forEach(tx => {
         const d = new Date(tx.date + 'T00:00:00');
@@ -817,7 +887,7 @@
       });
     } else if (activePeriod === 'month') {
       const weeks = ['Week 1', 'Week 2', 'Week 3', 'Week 4', 'Week 5'];
-      weeks.forEach(w => { buckets[w] = { label: w, income: 0, expense: 0 }; });
+      weeks.forEach(w => { buckets[w] = { label: w, income: 0, expense: 0, net: 0 }; });
 
       periodData.forEach(tx => {
         const d = new Date(tx.date + 'T00:00:00');
@@ -832,7 +902,7 @@
       });
     } else {
       const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      monthNames.forEach(m => { buckets[m] = { label: m, income: 0, expense: 0 }; });
+      monthNames.forEach(m => { buckets[m] = { label: m, income: 0, expense: 0, net: 0 }; });
 
       periodData.forEach(tx => {
         const d = new Date(tx.date + 'T00:00:00');
@@ -847,9 +917,15 @@
       });
     }
 
-    const dataPoints = Object.values(buckets);
+    // Calculate Net & Cumulative Net
+    let runningCumulative = 0;
+    const dataPoints = Object.values(buckets).map(p => {
+      p.net = p.income - p.expense;
+      runningCumulative += p.net;
+      p.cumulative = runningCumulative;
+      return p;
+    });
 
-    // Filter out trailing empty months if looking at all-time
     let displayPoints = dataPoints;
     if (activePeriod === 'all' && displayPoints.length > 6) {
       const hasAnyData = displayPoints.some(p => p.income > 0 || p.expense > 0);
@@ -864,84 +940,218 @@
     const chartWidth = width - paddingLeft - paddingRight;
     const chartHeight = height - paddingTop - paddingBottom;
 
-    let maxVal = 100;
-    displayPoints.forEach(p => {
-      if (p.income > maxVal) maxVal = p.income;
-      if (p.expense > maxVal) maxVal = p.expense;
-    });
-    maxVal = Math.ceil((maxVal * 1.25) / 100) * 100;
+    if (chartMode === 'trend') {
+      // ----------------------------------------------------------------------
+      // TREND LINE MODE: Cumulative Net Savings Curve
+      // ----------------------------------------------------------------------
+      elements.chartLegendBox.innerHTML = `
+        <span class="legend-item"><span class="legend-color" style="background-color: #38bdf8;"></span> Cumulative Net Savings</span>
+      `;
 
-    const gridSteps = 4;
-    ctx.textAlign = 'right';
-    ctx.textBaseline = 'middle';
-    ctx.font = '11px Plus Jakarta Sans, sans-serif';
-
-    for (let i = 0; i <= gridSteps; i++) {
-      const yVal = (maxVal / gridSteps) * i;
-      const yPos = paddingTop + chartHeight - (chartHeight * (i / gridSteps));
-
-      ctx.beginPath();
-      ctx.strokeStyle = '#1e293b';
-      ctx.lineWidth = 1;
-      ctx.setLineDash(i === 0 ? [] : [4, 4]);
-      ctx.moveTo(paddingLeft, yPos);
-      ctx.lineTo(paddingLeft + chartWidth, yPos);
-      ctx.stroke();
-      ctx.setLineDash([]);
-
-      ctx.fillStyle = '#64748b';
-      const formattedY = formatCurrency(yVal, true);
-      ctx.fillText(formattedY, paddingLeft - 10, yPos);
-    }
-
-    const groupCount = displayPoints.length;
-    const groupWidth = chartWidth / groupCount;
-    const barWidth = Math.min(Math.max(groupWidth * 0.28, 8), 24);
-    const barGap = 4;
-
-    displayPoints.forEach((p, idx) => {
-      const groupCenterX = paddingLeft + (idx * groupWidth) + (groupWidth / 2);
-
-      const incomeX = groupCenterX - barWidth - (barGap / 2);
-      const incomeHeight = Math.max((p.income / maxVal) * chartHeight, 0);
-      const incomeY = paddingTop + chartHeight - incomeHeight;
-
-      const expenseX = groupCenterX + (barGap / 2);
-      const expenseHeight = Math.max((p.expense / maxVal) * chartHeight, 0);
-      const expenseY = paddingTop + chartHeight - expenseHeight;
-
-      currentChartBars.push({
-        index: idx,
-        label: p.label,
-        income: p.income,
-        expense: p.expense,
-        groupCenterX,
-        xMin: groupCenterX - (groupWidth / 2),
-        xMax: groupCenterX + (groupWidth / 2)
+      let minVal = 0;
+      let maxVal = 100;
+      displayPoints.forEach(p => {
+        if (p.cumulative < minVal) minVal = p.cumulative;
+        if (p.cumulative > maxVal) maxVal = p.cumulative;
       });
 
-      const isHovered = barHoverIndex === idx;
+      maxVal = Math.ceil((maxVal * 1.2) / 100) * 100;
+      minVal = Math.floor((minVal * 1.2) / 100) * 100;
+      const range = (maxVal - minVal) || 100;
 
-      if (incomeHeight > 0) {
+      // Draw Grid
+      const gridSteps = 4;
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'middle';
+      ctx.font = '11px Plus Jakarta Sans, sans-serif';
+
+      for (let i = 0; i <= gridSteps; i++) {
+        const yVal = minVal + (range / gridSteps) * i;
+        const yPos = paddingTop + chartHeight - (chartHeight * (i / gridSteps));
+
         ctx.beginPath();
-        drawRoundedRect(ctx, incomeX, incomeY, barWidth, incomeHeight, 4);
-        ctx.fillStyle = isHovered ? '#34d399' : '#10b981';
-        ctx.fill();
+        ctx.strokeStyle = '#1e293b';
+        ctx.lineWidth = 1;
+        ctx.setLineDash(i === 0 ? [] : [4, 4]);
+        ctx.moveTo(paddingLeft, yPos);
+        ctx.lineTo(paddingLeft + chartWidth, yPos);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.fillStyle = '#64748b';
+        ctx.fillText(formatCurrency(yVal, true), paddingLeft - 10, yPos);
       }
 
-      if (expenseHeight > 0) {
+      // Draw Zero Line if crossing zero
+      if (minVal < 0 && maxVal > 0) {
+        const zeroY = paddingTop + chartHeight - (chartHeight * ((0 - minVal) / range));
         ctx.beginPath();
-        drawRoundedRect(ctx, expenseX, expenseY, barWidth, expenseHeight, 4);
-        ctx.fillStyle = isHovered ? '#f87171' : '#ef4444';
-        ctx.fill();
+        ctx.strokeStyle = '#475569';
+        ctx.lineWidth = 1.5;
+        ctx.moveTo(paddingLeft, zeroY);
+        ctx.lineTo(paddingLeft + chartWidth, zeroY);
+        ctx.stroke();
       }
 
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'top';
-      ctx.fillStyle = isHovered ? '#ffffff' : '#94a3b8';
-      ctx.font = isHovered ? '600 11px Plus Jakarta Sans, sans-serif' : '500 11px Plus Jakarta Sans, sans-serif';
-      ctx.fillText(p.label, groupCenterX, paddingTop + chartHeight + 10);
-    });
+      // Plot Trend Line Points
+      const groupCount = displayPoints.length;
+      const stepX = chartWidth / (groupCount > 1 ? groupCount - 1 : 1);
+      const points = [];
+
+      displayPoints.forEach((p, idx) => {
+        const posX = groupCount === 1 ? paddingLeft + (chartWidth / 2) : paddingLeft + (idx * stepX);
+        const posY = paddingTop + chartHeight - (chartHeight * ((p.cumulative - minVal) / range));
+        points.push({ x: posX, y: posY, data: p, index: idx });
+
+        currentChartElements.push({
+          type: 'point',
+          index: idx,
+          label: p.label,
+          income: p.income,
+          expense: p.expense,
+          net: p.net,
+          cumulative: p.cumulative,
+          x: posX,
+          y: posY,
+          xMin: posX - 18,
+          xMax: posX + 18
+        });
+
+        // X-axis label
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        ctx.fillStyle = barHoverIndex === idx ? '#ffffff' : '#94a3b8';
+        ctx.font = barHoverIndex === idx ? '700 11px Plus Jakarta Sans, sans-serif' : '500 11px Plus Jakarta Sans, sans-serif';
+        ctx.fillText(p.label, posX, paddingTop + chartHeight + 10);
+      });
+
+      // Fill Gradient under curve
+      if (points.length > 0) {
+        ctx.beginPath();
+        ctx.moveTo(points[0].x, paddingTop + chartHeight);
+        points.forEach(pt => ctx.lineTo(pt.x, pt.y));
+        ctx.lineTo(points[points.length - 1].x, paddingTop + chartHeight);
+        ctx.closePath();
+
+        const grad = ctx.createLinearGradient(0, paddingTop, 0, paddingTop + chartHeight);
+        grad.addColorStop(0, 'rgba(56, 189, 248, 0.35)');
+        grad.addColorStop(1, 'rgba(56, 189, 248, 0.0)');
+        ctx.fillStyle = grad;
+        ctx.fill();
+
+        // Stroke line
+        ctx.beginPath();
+        ctx.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length; i++) {
+          ctx.lineTo(points[i].x, points[i].y);
+        }
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+
+        // Draw points
+        points.forEach(pt => {
+          const isHovered = barHoverIndex === pt.index;
+          ctx.beginPath();
+          ctx.arc(pt.x, pt.y, isHovered ? 6 : 4, 0, Math.PI * 2);
+          ctx.fillStyle = isHovered ? '#ffffff' : '#38bdf8';
+          ctx.fill();
+          ctx.strokeStyle = '#0f172a';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        });
+      }
+
+    } else {
+      // ----------------------------------------------------------------------
+      // BAR CHART MODE: Income vs. Expense Grouped Bars
+      // ----------------------------------------------------------------------
+      elements.chartLegendBox.innerHTML = `
+        <span class="legend-item"><span class="legend-color legend-income"></span> Income</span>
+        <span class="legend-item"><span class="legend-color legend-expense"></span> Expense</span>
+      `;
+
+      let maxVal = 100;
+      displayPoints.forEach(p => {
+        if (p.income > maxVal) maxVal = p.income;
+        if (p.expense > maxVal) maxVal = p.expense;
+      });
+      maxVal = Math.ceil((maxVal * 1.25) / 100) * 100;
+
+      const gridSteps = 4;
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'middle';
+      ctx.font = '11px Plus Jakarta Sans, sans-serif';
+
+      for (let i = 0; i <= gridSteps; i++) {
+        const yVal = (maxVal / gridSteps) * i;
+        const yPos = paddingTop + chartHeight - (chartHeight * (i / gridSteps));
+
+        ctx.beginPath();
+        ctx.strokeStyle = '#1e293b';
+        ctx.lineWidth = 1;
+        ctx.setLineDash(i === 0 ? [] : [4, 4]);
+        ctx.moveTo(paddingLeft, yPos);
+        ctx.lineTo(paddingLeft + chartWidth, yPos);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.fillStyle = '#64748b';
+        ctx.fillText(formatCurrency(yVal, true), paddingLeft - 10, yPos);
+      }
+
+      const groupCount = displayPoints.length;
+      const groupWidth = chartWidth / groupCount;
+      const barWidth = Math.min(Math.max(groupWidth * 0.28, 8), 24);
+      const barGap = 4;
+
+      displayPoints.forEach((p, idx) => {
+        const groupCenterX = paddingLeft + (idx * groupWidth) + (groupWidth / 2);
+
+        const incomeX = groupCenterX - barWidth - (barGap / 2);
+        const incomeHeight = Math.max((p.income / maxVal) * chartHeight, 0);
+        const incomeY = paddingTop + chartHeight - incomeHeight;
+
+        const expenseX = groupCenterX + (barGap / 2);
+        const expenseHeight = Math.max((p.expense / maxVal) * chartHeight, 0);
+        const expenseY = paddingTop + chartHeight - expenseHeight;
+
+        currentChartElements.push({
+          type: 'bar',
+          index: idx,
+          label: p.label,
+          income: p.income,
+          expense: p.expense,
+          net: p.net,
+          cumulative: p.cumulative,
+          groupCenterX,
+          xMin: groupCenterX - (groupWidth / 2),
+          xMax: groupCenterX + (groupWidth / 2)
+        });
+
+        const isHovered = barHoverIndex === idx;
+
+        if (incomeHeight > 0) {
+          ctx.beginPath();
+          drawRoundedRect(ctx, incomeX, incomeY, barWidth, incomeHeight, 4);
+          ctx.fillStyle = isHovered ? '#34d399' : '#10b981';
+          ctx.fill();
+        }
+
+        if (expenseHeight > 0) {
+          ctx.beginPath();
+          drawRoundedRect(ctx, expenseX, expenseY, barWidth, expenseHeight, 4);
+          ctx.fillStyle = isHovered ? '#f87171' : '#ef4444';
+          ctx.fill();
+        }
+
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        ctx.fillStyle = isHovered ? '#ffffff' : '#94a3b8';
+        ctx.font = isHovered ? '700 11px Plus Jakarta Sans, sans-serif' : '500 11px Plus Jakarta Sans, sans-serif';
+        ctx.fillText(p.label, groupCenterX, paddingTop + chartHeight + 10);
+      });
+    }
   }
 
   function drawRoundedRect(ctx, x, y, width, height, radius) {
@@ -956,7 +1166,7 @@
     ctx.closePath();
   }
 
-  // 2. Expense Category Donut Chart
+  // 2. Expense Category Donut Chart with Category Budget Progress
   function renderCategoryDonut(periodData) {
     const canvas = elements.categoryDonutCanvas;
     if (!canvas || !canvas.parentElement) return;
@@ -995,11 +1205,13 @@
           No expenses recorded in this period
         </div>
       `;
+      if (elements.budgetAlertPill) elements.budgetAlertPill.style.display = 'none';
       return;
     }
 
     let startAngle = -Math.PI / 2;
     const legendHtml = [];
+    let overBudgetCategoriesCount = 0;
 
     sortedCategories.forEach(([catName, amt]) => {
       const meta = getCategoryMeta(catName, 'expense');
@@ -1007,6 +1219,7 @@
       const endAngle = startAngle + sliceAngle;
       const percent = Math.round((amt / totalExpense) * 100);
 
+      // Donut slice
       ctx.beginPath();
       ctx.arc(centerX, centerY, outerRadius, startAngle, endAngle, false);
       ctx.arc(centerX, centerY, innerRadius, endAngle, startAngle, true);
@@ -1020,21 +1233,67 @@
 
       startAngle = endAngle;
 
+      // Category Budget Progress Evaluation
+      const budgetCapUsd = categoryBudgetsUsd[catName] || 0;
+      const budgetCapDisplay = toDisplayAmount(budgetCapUsd);
+      let budgetProgressBarHtml = '';
+
+      if (budgetCapDisplay > 0) {
+        const budgetPercent = Math.min(Math.round((amt / budgetCapDisplay) * 100), 100);
+        let barClass = 'normal';
+        let alertBadge = '';
+
+        if (amt > budgetCapDisplay) {
+          barClass = 'danger';
+          overBudgetCategoriesCount++;
+          const overDiff = amt - budgetCapDisplay;
+          alertBadge = `<span class="cat-cap-badge over">⚠️ Over by ${formatCurrency(overDiff)}</span>`;
+        } else if (amt >= budgetCapDisplay * 0.8) {
+          barClass = 'warning';
+          alertBadge = `<span class="cat-cap-badge" style="color:#f59e0b;">${Math.round((amt / budgetCapDisplay) * 100)}% cap</span>`;
+        } else {
+          alertBadge = `<span class="cat-cap-badge" style="color:#64748b;">${Math.round((amt / budgetCapDisplay) * 100)}% of cap</span>`;
+        }
+
+        budgetProgressBarHtml = `
+          <div class="cat-budget-track" title="Budget: ${formatCurrency(budgetCapDisplay)}">
+            <div class="cat-budget-bar ${barClass}" style="width: ${budgetPercent}%"></div>
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-top:2px; font-size:10px; color:#64748b;">
+            <span>Limit: ${formatCurrency(budgetCapDisplay)}</span>
+            ${alertBadge}
+          </div>
+        `;
+      }
+
       legendHtml.push(`
         <div class="cat-legend-row" title="${catName}: ${formatCurrency(amt)} (${percent}%)">
-          <div class="cat-legend-left">
-            <span class="cat-dot" style="background-color: ${meta.color}"></span>
-            <span>${catName}</span>
+          <div class="cat-legend-top">
+            <div class="cat-legend-left">
+              <span class="cat-dot" style="background-color: ${meta.color}"></span>
+              <span>${catName}</span>
+            </div>
+            <div class="cat-legend-right">
+              <span class="cat-amount">${formatCurrency(amt)}</span>
+              <span class="cat-percent">${percent}%</span>
+            </div>
           </div>
-          <div class="cat-legend-right">
-            <span class="cat-amount">${formatCurrency(amt)}</span>
-            <span class="cat-percent">${percent}%</span>
-          </div>
+          ${budgetProgressBarHtml}
         </div>
       `);
     });
 
     elements.categoryLegendList.innerHTML = legendHtml.join('');
+
+    // Dynamic Toolbar Budget Alert Pill
+    if (elements.budgetAlertPill) {
+      if (overBudgetCategoriesCount > 0) {
+        elements.budgetAlertPill.style.display = 'inline-block';
+        elements.budgetAlertPill.textContent = `⚠️ ${overBudgetCategoriesCount} Categor${overBudgetCategoriesCount === 1 ? 'y' : 'ies'} Over Cap`;
+      } else {
+        elements.budgetAlertPill.style.display = 'none';
+      }
+    }
   }
 
   // ==========================================================================
@@ -1226,7 +1485,6 @@
     populateFormCategorySelect(tx.type, tx.category);
 
     elements.txTitle.value = tx.title || '';
-    // Display in current currency
     const displayAmt = toDisplayAmount(tx.baseAmount);
     elements.txAmount.value = displayAmt.toFixed(2);
     elements.txDate.value = tx.date || '';
@@ -1282,7 +1540,6 @@
 
     if (hasError) return;
 
-    // Convert entered amount from current currency to USD base
     const baseAmount = toBaseUsdAmount(enteredAmount);
 
     if (editingId) {
@@ -1336,7 +1593,7 @@
   }
 
   // ==========================================================================
-  // Budget Modal Handlers (Converted to/from USD Base)
+  // Budget Modal Handlers
   // ==========================================================================
   function openBudgetModal() {
     const displayBudget = toDisplayAmount(monthlyBudgetUsd);
@@ -1360,6 +1617,96 @@
       closeBudgetModal();
       refreshDashboard();
       showToast('Monthly budget target updated');
+    }
+  }
+
+  // ==========================================================================
+  // Category Budget Caps Modal Handlers
+  // ==========================================================================
+  function openCategoryBudgetModal() {
+    const curr = CURRENCIES[currentCurrency] || CURRENCIES.USD;
+    elements.catBudgetCurrencyNotice.textContent = `${curr.name} (${curr.symbol})`;
+
+    let html = '';
+    EXPENSE_CATEGORIES.forEach(cat => {
+      const currentUsdCap = categoryBudgetsUsd[cat.name] || 0;
+      const displayCap = Math.round(toDisplayAmount(currentUsdCap));
+
+      html += `
+        <div class="cat-budget-row-input">
+          <div class="cat-budget-row-header">
+            <span>${cat.icon}</span>
+            <span>${cat.name}</span>
+          </div>
+          <input type="number" class="form-input cat-cap-input" data-category="${cat.name}" value="${displayCap}" min="0" step="10">
+        </div>
+      `;
+    });
+
+    elements.catBudgetInputsContainer.innerHTML = html;
+    elements.catBudgetModal.classList.add('active');
+    elements.catBudgetModal.setAttribute('aria-hidden', 'false');
+  }
+
+  function closeCategoryBudgetModal() {
+    elements.catBudgetModal.classList.remove('active');
+    elements.catBudgetModal.setAttribute('aria-hidden', 'true');
+  }
+
+  function handleCategoryBudgetSubmit(e) {
+    e.preventDefault();
+    const inputs = elements.catBudgetInputsContainer.querySelectorAll('.cat-cap-input');
+    inputs.forEach(inp => {
+      const cat = inp.getAttribute('data-category');
+      const val = parseFloat(inp.value) || 0;
+      categoryBudgetsUsd[cat] = toBaseUsdAmount(val);
+    });
+
+    saveCategoryBudgets();
+    closeCategoryBudgetModal();
+    refreshDashboard();
+    showToast('Category monthly budget caps updated!');
+  }
+
+  // ==========================================================================
+  // Exchange Rate Customizer Modal Handlers
+  // ==========================================================================
+  function openExchangeRateModal() {
+    const curr = CURRENCIES[currentCurrency] || CURRENCIES.USD;
+    elements.rateModalCurrencyName.textContent = curr.code;
+    elements.customRateInput.value = curr.rate;
+    elements.exchangeRateModal.classList.add('active');
+    elements.exchangeRateModal.setAttribute('aria-hidden', 'false');
+    elements.customRateInput.focus();
+  }
+
+  function closeExchangeRateModal() {
+    elements.exchangeRateModal.classList.remove('active');
+    elements.exchangeRateModal.setAttribute('aria-hidden', 'true');
+  }
+
+  function handleExchangeRateSubmit(e) {
+    e.preventDefault();
+    const val = parseFloat(elements.customRateInput.value);
+    if (!isNaN(val) && val > 0) {
+      CURRENCIES[currentCurrency].rate = val;
+      saveCustomRates();
+      closeExchangeRateModal();
+      updateCurrencyUI();
+      refreshDashboard();
+      showToast(`Updated 1 USD rate for ${currentCurrency} to ${val}`);
+    }
+  }
+
+  function handleResetRate() {
+    const def = DEFAULT_CURRENCIES[currentCurrency];
+    if (def) {
+      CURRENCIES[currentCurrency].rate = def.rate;
+      saveCustomRates();
+      closeExchangeRateModal();
+      updateCurrencyUI();
+      refreshDashboard();
+      showToast(`Reset ${currentCurrency} exchange rate to default (${def.rate})`);
     }
   }
 
@@ -1491,7 +1838,6 @@
 
     let count = 0;
     for (let i = 1; i < lines.length; i++) {
-      // Split by comma ignoring commas inside quotes
       const row = lines[i].match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || lines[i].split(',');
       if (!row || row.length < 2) continue;
 
@@ -1537,15 +1883,19 @@
     }
   }
 
-  // Reset sample records
   function resetSampleData() {
     if (confirm('Reset to original sample dataset? All custom edits will be replaced.')) {
       transactions = generateDefaultDemoTransactions();
       monthlyBudgetUsd = 3500;
+      categoryBudgetsUsd = { ...DEFAULT_CAT_BUDGETS_USD };
+      CURRENCIES = JSON.parse(JSON.stringify(DEFAULT_CURRENCIES));
       saveTransactions();
       saveBudget();
+      saveCategoryBudgets();
+      saveCustomRates();
+      updateCurrencyUI();
       refreshDashboard();
-      showToast('Sample data restored');
+      showToast('Sample dataset restored');
     }
   }
 
@@ -1562,6 +1912,35 @@
         setCurrency(e.target.value);
       });
     }
+
+    // Exchange Rate Modal Trigger
+    if (elements.exchangeRateBadge) {
+      elements.exchangeRateBadge.addEventListener('click', openExchangeRateModal);
+    }
+    elements.closeExchangeRateModalBtn.addEventListener('click', closeExchangeRateModal);
+    elements.exchangeRateForm.addEventListener('submit', handleExchangeRateSubmit);
+    elements.resetRateBtn.addEventListener('click', handleResetRate);
+
+    // Chart Mode Toggle (Bars vs Trend Line)
+    elements.chartModeBarBtn.addEventListener('click', () => {
+      chartMode = 'bar';
+      elements.chartModeBarBtn.classList.add('active');
+      elements.chartModeLineBtn.classList.remove('active');
+      renderCashFlowChart(getPeriodFilteredTransactions());
+    });
+
+    elements.chartModeLineBtn.addEventListener('click', () => {
+      chartMode = 'trend';
+      elements.chartModeLineBtn.classList.add('active');
+      elements.chartModeBarBtn.classList.remove('active');
+      renderCashFlowChart(getPeriodFilteredTransactions());
+    });
+
+    // Category Budgets Modal
+    elements.openCatBudgetsBtn.addEventListener('click', openCategoryBudgetModal);
+    elements.closeCatBudgetModalBtn.addEventListener('click', closeCategoryBudgetModal);
+    elements.cancelCatBudgetBtn.addEventListener('click', closeCategoryBudgetModal);
+    elements.catBudgetForm.addEventListener('submit', handleCategoryBudgetSubmit);
 
     // Backup & Restore
     elements.exportDataBtn.addEventListener('click', exportToCSV);
@@ -1598,12 +1977,16 @@
     window.addEventListener('click', (e) => {
       if (e.target === elements.transactionModal) closeModal();
       if (e.target === elements.budgetModal) closeBudgetModal();
+      if (e.target === elements.catBudgetModal) closeCategoryBudgetModal();
+      if (e.target === elements.exchangeRateModal) closeExchangeRateModal();
     });
 
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
         closeModal();
         closeBudgetModal();
+        closeCategoryBudgetModal();
+        closeExchangeRateModal();
       }
     });
 
@@ -1665,7 +2048,7 @@
 
     elements.resetDemoBtn.addEventListener('click', resetSampleData);
 
-    // Interactive Hover on Cash Flow Chart
+    // Interactive Hover on Canvas Chart
     elements.cashFlowCanvas.addEventListener('mousemove', (e) => {
       const rect = elements.cashFlowCanvas.getBoundingClientRect();
       const mouseX = e.clientX - rect.left;
@@ -1674,11 +2057,11 @@
       let matchedIndex = -1;
       let matchedData = null;
 
-      for (let i = 0; i < currentChartBars.length; i++) {
-        const bar = currentChartBars[i];
-        if (mouseX >= bar.xMin && mouseX <= bar.xMax) {
-          matchedIndex = bar.index;
-          matchedData = bar;
+      for (let i = 0; i < currentChartElements.length; i++) {
+        const item = currentChartElements[i];
+        if (mouseX >= item.xMin && mouseX <= item.xMax) {
+          matchedIndex = item.index;
+          matchedData = item;
           break;
         }
       }
@@ -1691,14 +2074,24 @@
       if (matchedData) {
         const tooltip = elements.chartTooltip;
         tooltip.style.display = 'block';
-        tooltip.style.left = `${matchedData.groupCenterX}px`;
+        const posX = matchedData.groupCenterX || matchedData.x;
+        tooltip.style.left = `${posX}px`;
         tooltip.style.top = `${mouseY}px`;
-        tooltip.innerHTML = `
-          <strong>${matchedData.label}</strong><br>
-          <span style="color:#10b981;">Income: ${formatCurrency(matchedData.income)}</span><br>
-          <span style="color:#ef4444;">Expense: ${formatCurrency(matchedData.expense)}</span><br>
-          <span style="color:#94a3b8;">Net: ${formatCurrency(matchedData.income - matchedData.expense)}</span>
-        `;
+
+        if (chartMode === 'trend') {
+          tooltip.innerHTML = `
+            <strong>${matchedData.label}</strong><br>
+            <span style="color:#38bdf8;">Cumulative Net: ${formatCurrency(matchedData.cumulative)}</span><br>
+            <span style="color:#94a3b8;">Period Net: ${formatCurrency(matchedData.net)}</span>
+          `;
+        } else {
+          tooltip.innerHTML = `
+            <strong>${matchedData.label}</strong><br>
+            <span style="color:#10b981;">Income: ${formatCurrency(matchedData.income)}</span><br>
+            <span style="color:#ef4444;">Expense: ${formatCurrency(matchedData.expense)}</span><br>
+            <span style="color:#94a3b8;">Net: ${formatCurrency(matchedData.net)}</span>
+          `;
+        }
       } else {
         elements.chartTooltip.style.display = 'none';
       }
@@ -1712,7 +2105,7 @@
       elements.chartTooltip.style.display = 'none';
     });
 
-    // Resize listener for responsive canvas rerendering
+    // Window Resize
     let resizeTimer;
     window.addEventListener('resize', () => {
       clearTimeout(resizeTimer);

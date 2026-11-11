@@ -106,6 +106,7 @@
         <div class="quick-summary-tags">
           <span class="status-indicator live-dot"></span>
           <span class="status-text" id="activeFilterLabel">Showing all historical records</span>
+          <span class="budget-alert-pill" id="budgetAlertPill" style="display: none;"></span>
           <button class="btn-text-danger" id="resetDemoBtn" title="Reset sample records">Reset Sample Data</button>
         </div>
       </section>
@@ -202,11 +203,17 @@
           <div class="card-header">
             <div>
               <h2 class="card-title">Cash Flow Dynamics</h2>
-              <p class="card-subtitle">Income vs Expenses over time</p>
+              <p class="card-subtitle">Income vs Expenses & Net Balance</p>
             </div>
-            <div class="chart-legend-box">
-              <span class="legend-item"><span class="legend-color legend-income"></span> Income</span>
-              <span class="legend-item"><span class="legend-color legend-expense"></span> Expense</span>
+            <div class="chart-header-right">
+              <div class="chart-mode-toggle">
+                <button class="chart-mode-btn active" id="chartModeBarBtn" title="Show bar comparison">Bars</button>
+                <button class="chart-mode-btn" id="chartModeLineBtn" title="Show cumulative trend line">Trend</button>
+              </div>
+              <div class="chart-legend-box" id="chartLegendBox">
+                <span class="legend-item"><span class="legend-color legend-income"></span> Income</span>
+                <span class="legend-item"><span class="legend-color legend-expense"></span> Expense</span>
+              </div>
             </div>
           </div>
           <div class="chart-canvas-container" id="barChartContainer">
@@ -220,9 +227,14 @@
           <div class="card-header">
             <div>
               <h2 class="card-title">Expense Breakdown</h2>
-              <p class="card-subtitle">Spending by category</p>
+              <p class="card-subtitle">Spending vs Category Budgets</p>
             </div>
-            <span class="badge" id="categoryCountBadge">0 Categories</span>
+            <div class="card-header-actions">
+              <button class="btn btn-secondary btn-sm" id="openCatBudgetsBtn" title="Set budget caps per category">
+                🎯 Set Category Caps
+              </button>
+              <span class="badge" id="categoryCountBadge">0 Categories</span>
+            </div>
           </div>
           <div class="donut-chart-layout">
             <div class="donut-canvas-container" id="donutContainer">
@@ -473,6 +485,61 @@
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" id="cancelBudgetBtn">Cancel</button>
           <button type="submit" class="btn btn-primary">Update Limit</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Category Budget Caps Modal -->
+  <div class="modal-backdrop" id="catBudgetModal" aria-hidden="true">
+    <div class="modal-dialog modal-md">
+      <div class="modal-header">
+        <h3 class="modal-title">Category Monthly Budget Caps</h3>
+        <button class="modal-close-btn" id="closeCatBudgetModalBtn" aria-label="Close modal">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <form id="catBudgetForm">
+        <p class="form-hint" style="margin-bottom: 12px;">
+          Set individual monthly spending limits for each category in <strong id="catBudgetCurrencyNotice">USD</strong>. Set to 0 for unlimited.
+        </p>
+        <div class="cat-budget-inputs-grid" id="catBudgetInputsContainer">
+          <!-- Dynamically populated per category -->
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="cancelCatBudgetBtn">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Category Caps</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Custom Exchange Rate Settings Modal -->
+  <div class="modal-backdrop" id="exchangeRateModal" aria-hidden="true">
+    <div class="modal-dialog modal-sm">
+      <div class="modal-header">
+        <h3 class="modal-title">Exchange Rate Settings</h3>
+        <button class="modal-close-btn" id="closeExchangeRateModalBtn" aria-label="Close modal">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <form id="exchangeRateForm">
+        <div class="form-group">
+          <label class="form-label" for="customRateInput">
+            Rate for <strong id="rateModalCurrencyName">NGN</strong> per 1 USD
+          </label>
+          <input type="number" id="customRateInput" class="form-input" step="0.01" min="0.001" required>
+          <span class="form-hint">Customize the valuation multiplier against base USD.</span>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="resetRateBtn">Reset Default</button>
+          <button type="submit" class="btn btn-primary">Update Rate</button>
         </div>
       </form>
     </div>
